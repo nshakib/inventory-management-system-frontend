@@ -221,13 +221,13 @@ You will also need access to the Inventory Management System backend API.
 Clone the repository:
 
 ```bash
-git clone https://github.com/nshakib/inventory-management-system.git
+git clone [https://github.com/nshakib/inventory-management-system.git](https://github.com/nshakib/inventory-management-system-frontend.git)
 ```
 
 Navigate to the frontend directory:
 
 ```bash
-cd inventory-management-system/frontend
+cd inventory-management-system-frontend
 ```
 
 Install dependencies:
