@@ -6,11 +6,13 @@ import {
   type ReactNode,
 } from "react";
 
+type Role = "admin" | "customer";
+
 type User = {
   id: string;
   name: string;
   email: string;
-  role?: string;
+  role: Role;
 };
 
 type AuthContextType = {
@@ -28,7 +30,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const storedUser = localStorage.getItem("pos-user");
 
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error("Invalid stored user data:", error);
+        localStorage.removeItem("pos-user");
+      }
     }
   }, []);
 

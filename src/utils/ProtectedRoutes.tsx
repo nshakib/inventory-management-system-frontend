@@ -1,29 +1,35 @@
-import React, { useEffect } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router';
+import { useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router";
+import type { ProtectedRoutesProps } from "../types";
 
-const ProtectedRoutes = ({children, requireRole}) => {
-    const {user} = useAuth();
-    const navigate = useNavigate();
+const ProtectedRoutes = ({
+  children,
+  requireRole,
+}: ProtectedRoutesProps) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-    useEffect(() =>{
-        if(!user){
-            navigate('/login')
-            return;
-        }
-        if(!requireRole.includes(user.role)){
-            navigate('/unauthorized');
-            return;
-        }
-    },[user, navigate, requireRole])
-
-    if(!user){
-        return null;
+  useEffect(() => {
+    if (!user) {
+      navigate("/login", { replace: true });
+      return;
     }
-    if(!requireRole.includes(user.role)) return null;
 
+    if (!requireRole.includes(user.role)) {
+      navigate("/unauthorized", { replace: true });
+    }
+  }, [user, navigate, requireRole]);
 
-  return (children)
-}
+  if (!user) {
+    return null;
+  }
 
-export default ProtectedRoutes
+  if (!requireRole.includes(user.role)) {
+    return null;
+  }
+
+  return <>{children}</>;
+};
+
+export default ProtectedRoutes;
