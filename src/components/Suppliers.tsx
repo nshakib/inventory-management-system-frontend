@@ -139,18 +139,18 @@ const Suppliers = () => {
     resetForm();
   };
 
-  const handleEdit = (supplier: Supplier) => {
-    setEditSupplier(supplier);
+  // const handleEdit = (supplier: Supplier) => {
+  //   setEditSupplier(supplier);
 
-    setFormData({
-      name: supplier.name,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-    });
+  //   setFormData({
+  //     name: supplier.name,
+  //     email: supplier.email,
+  //     phone: supplier.phone,
+  //     address: supplier.address,
+  //   });
 
-    setAddEditModal(true);
-  };
+  //   setAddEditModal(true);
+  // };
 
   const handleDelete = async (id: string, name: string) => {
     const confirmDelete = window.confirm(`Delete "${name}"? This cannot be undone.`);
@@ -298,7 +298,7 @@ const handleOpenEditModal = (supplier: Supplier) => {
                         <Button
                           variant="warning"
                           className="px-3 py-1.5 text-xs"
-                          onClick={() => handleEdit(supplier)}
+                          onClick={() => handleOpenEditModal(supplier)}
                           aria-label={`Edit ${supplier.name}`}
                         >
                           Edit
