@@ -1,7 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import axios from "axios";
+import { FaSearch, FaPlus, FaBoxOpen } from "react-icons/fa";
 import type { Product, Category, Supplier } from "../types";
 import { API_URL } from "../config/api";
+import { useToast } from "../context/ToastContext";
+import Button from "./ui/Button";
+import Modal from "./ui/Modal";
+
+// Shared classes so every field in this form (and future forms) looks
+// and behaves the same: consistent padding, border, and focus ring.
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 " +
+  "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200";
 
 const Products = () => {
   const [openModal, setOpenModal] = useState(false);
@@ -10,6 +20,9 @@ const Products = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -33,15 +46,14 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get(
-        `${API_URL}/api/products/get`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
-          },
-          withCredentials: true,
-        }
-      );
+      setLoading(true);
+
+      const response = await axios.get(`${API_URL}/api/products/get`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+        withCredentials: true,
+      });
 
       if (response.data.success) {
         setSuppliers(response.data.suppliers || []);
@@ -51,13 +63,15 @@ const Products = () => {
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
-          "Error fetching products:",
-          error.response?.data || error.message
+        showToast(
+          error.response?.data?.message || "Error fetching products.",
+          "error"
         );
       } else {
-        console.error("Error fetching products:", error);
+        showToast("Error fetching products.", "error");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,6 +92,7 @@ const Products = () => {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSubmitting(true);
 
     const productData = {
       ...formData,
@@ -92,31 +107,20 @@ const Products = () => {
           productData,
           {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
+              Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
             },
             withCredentials: true,
           }
         );
 
         if (response.data.success) {
-          alert("Product updated successfully");
-
+          showToast("Product updated successfully", "success");
           setOpenModal(false);
           setEditProduct(null);
           resetForm();
-
           fetchProducts();
         } else {
-          console.error(
-            "Error updating product",
-            response.data
-          );
-
-          alert(
-            "Error updating product. Please try again!"
-          );
+          showToast("Error updating product. Please try again!", "error");
         }
       } else {
         const response = await axios.post(
@@ -124,48 +128,36 @@ const Products = () => {
           productData,
           {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
+              Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
             },
             withCredentials: true,
           }
         );
 
         if (response.data.success) {
-          alert("Product added successfully");
-
+          showToast("Product added successfully", "success");
           setOpenModal(false);
           resetForm();
-
           fetchProducts();
         } else {
-          console.error(
-            "Error adding product",
-            response.data
-          );
-
-          alert(
-            "Error adding product. Please try again!"
-          );
+          showToast("Error adding product. Please try again!", "error");
         }
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again!"
+        showToast(
+          error.response?.data?.message || "Something went wrong. Please try again!",
+          "error"
         );
-      } else if (error instanceof Error) {
-        alert(error.message);
       } else {
-        alert("Something went wrong. Please try again!");
+        showToast("Something went wrong. Please try again!", "error");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleEdit = (product: Product) => {
-    setOpenModal(true);
     setEditProduct(product);
 
     setFormData({
@@ -176,6 +168,8 @@ const Products = () => {
       categoryId: product.categoryId._id,
       supplierId: product.supplierId._id,
     });
+
+    setOpenModal(true);
   };
 
   const handleCancel = () => {
@@ -184,327 +178,313 @@ const Products = () => {
     resetForm();
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this product?"
-    );
+  const handleDelete = async (id: string, name: string) => {
+    const confirmDelete = window.confirm(`Delete "${name}"? This cannot be undone.`);
 
     if (!confirmDelete) return;
 
     try {
-      const response = await axios.delete(
-        `${API_URL}/api/products/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-          withCredentials: true,
-        }
-      );
+      const response = await axios.delete(`${API_URL}/api/products/${id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+        withCredentials: true,
+      });
 
       if (response.data.success) {
-        alert("Product deleted successfully");
+        showToast("Product deleted successfully", "success");
         fetchProducts();
       } else {
-        console.error(
-          "Error deleting product",
-          response.data
-        );
-
-        alert("Error deleting product");
+        showToast("Error deleting product", "error");
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Error deleting product. Please try again"
+        showToast(
+          error.response?.data?.message || "Error deleting product. Please try again",
+          "error"
         );
-      } else if (error instanceof Error) {
-        alert(error.message);
       } else {
-        alert("Error deleting product. Please try again");
+        showToast("Error deleting product. Please try again", "error");
       }
     }
   };
 
-  const handleSearch = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const searchTerm = e.target.value.toLowerCase();
 
     setFilteredProducts(
-      products.filter((product) =>
-        product.name.toLowerCase().includes(searchTerm)
-      )
+      products.filter((product) => product.name.toLowerCase().includes(searchTerm))
+    );
+  };
+
+  // Stock severity is conveyed with both color AND a text label/icon so
+  // it doesn't rely on color perception alone.
+  const stockBadge = (stock: number) => {
+    if (stock === 0) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+          Out · {stock}
+        </span>
+      );
+    }
+
+    if (stock < 5) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+          Low · {stock}
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+        In stock · {stock}
+      </span>
     );
   };
 
   return (
-    <div className="w-full h-full flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-bold">
-        Product Management
-      </h1>
+    <div className="flex h-full w-full flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold text-gray-900">Product Management</h1>
+        <p className="text-sm text-gray-500">
+          {loading ? "Loading products..." : `${filteredProducts.length} of ${products.length} products`}
+        </p>
+      </div>
 
-      <div className="flex justify-between items-center">
-        <input
-          type="text"
-          placeholder="Search"
-          className="border p-1 bg-white rounded px-4"
-          onChange={handleSearch}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <label htmlFor="product-search" className="sr-only">
+            Search products by name
+          </label>
 
-        <button
-          className="px-4 py-1.5 bg-blue-500 text-white rounded cursor-pointer"
+          <FaSearch
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          />
+
+          <input
+            id="product-search"
+            type="text"
+            placeholder="Search products..."
+            className={`${inputClass} pl-9`}
+            onChange={handleSearch}
+          />
+        </div>
+
+        <Button
           onClick={() => {
             setEditProduct(null);
             resetForm();
             setOpenModal(true);
           }}
+          className="w-full sm:w-auto"
         >
+          <FaPlus size={12} aria-hidden="true" />
           Add Product
-        </button>
+        </Button>
       </div>
 
-      {/* Product list */}
-      <div>
-        <table className="w-full border-collapse border border-gray-300 mt-4">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border border-gray-300 p-2">
-                SL
-              </th>
+      {/* Product list. overflow-x-auto keeps the table usable on
+          narrow/mobile screens instead of squeezing or breaking layout. */}
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <caption className="sr-only">List of products with category, supplier, price and stock</caption>
 
-              <th className="border border-gray-300 p-2">
-                Product Name
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Category Name
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Supplier Name
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Price
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Stock
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Action
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredProducts.map((product, index) => (
-              <tr key={product._id}>
-                <td className="border border-gray-300 p-2 text-center">
-                  {index + 1}
-                </td>
-
-                <td className="border border-gray-300 p-2 text-center">
-                  {product.name}
-                </td>
-
-                <td className="border border-gray-300 p-2 text-center">
-                  {product.categoryId.categoryName}
-                </td>
-
-                <td className="border border-gray-300 p-2 text-center">
-                  {product.supplierId.name}
-                </td>
-
-                <td className="border border-gray-300 p-2 text-center">
-                  {product.price}
-                </td>
-
-                <td className="border border-gray-300 p-2 text-center">
-                  {product.stock === 0 ? (
-                    <span className="bg-red-100 text-red-500 px-2 py-1 rounded">
-                      {product.stock}
-                    </span>
-                  ) : product.stock < 5 ? (
-                    <span className="bg-yellow-100 text-yellow-600 px-2 py-1 rounded">
-                      {product.stock}
-                    </span>
-                  ) : (
-                    <span className="bg-green-100 text-green-500 px-2 py-1 rounded">
-                      {product.stock}
-                    </span>
-                  )}
-                </td>
-
-                <td className="border border-gray-200 p-2">
-                  <div className="flex items-center justify-center">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="bg-yellow-500 text-white px-2 py-1 rounded-md hover:bg-yellow-600 mr-2 cursor-pointer"
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        handleDelete(product._id)
-                      }
-                      className="bg-red-500 text-white px-2 py-1 rounded-md hover:bg-red-600 cursor-pointer"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
+            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-medium">SL</th>
+                <th scope="col" className="px-4 py-3 font-medium">Product Name</th>
+                <th scope="col" className="px-4 py-3 font-medium">Category</th>
+                <th scope="col" className="px-4 py-3 font-medium">Supplier</th>
+                <th scope="col" className="px-4 py-3 font-medium">Price</th>
+                <th scope="col" className="px-4 py-3 font-medium">Stock</th>
+                <th scope="col" className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
 
-        {filteredProducts.length === 0 && (
-          <div className="p-4 text-center">
-            No Records
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 w-full rounded bg-gray-200" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                filteredProducts.map((product, index) => (
+                  <tr key={product._id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{product.categoryId.categoryName}</td>
+                    <td className="px-4 py-3 text-gray-600">{product.supplierId.name}</td>
+                    <td className="px-4 py-3 text-gray-600">${product.price}</td>
+                    <td className="px-4 py-3">{stockBadge(product.stock)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="warning"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => handleEdit(product)}
+                          aria-label={`Edit ${product.name}`}
+                        >
+                          Edit
+                        </Button>
+
+                        <Button
+                          variant="danger"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => handleDelete(product._id, product.name)}
+                          aria-label={`Delete ${product.name}`}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {!loading && filteredProducts.length === 0 && (
+          <div className="flex flex-col items-center gap-2 p-10 text-center text-gray-400">
+            <FaBoxOpen size={28} aria-hidden="true" />
+            <p className="text-sm">No products found</p>
           </div>
         )}
       </div>
 
-      {/* Modal */}
-      {openModal && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black/50 flex justify-center items-center">
-          <div className="bg-white p-4 rounded shadow-md w-1/3 relative">
-            <h1 className="text-xl font-bold">
-              {editProduct
-                ? "Update Product"
-                : "Add Product"}
-            </h1>
+      <Modal
+        isOpen={openModal}
+        onClose={handleCancel}
+        title={editProduct ? "Update Product" : "Add Product"}
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
+              Product Name
+            </label>
+            <input
+              id="name"
+              className={inputClass}
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              type="text"
+              required
+            />
+          </div>
 
-            <button
-              type="button"
-              className="absolute top-4 right-4 font-bold text-lg cursor-pointer"
-              onClick={handleCancel}
-            >
-              X
-            </button>
+          <div>
+            <label htmlFor="description" className="mb-1 block text-sm font-medium text-gray-700">
+              Description
+            </label>
+            <input
+              id="description"
+              className={inputClass}
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              type="text"
+              required
+            />
+          </div>
 
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col gap-4 mt-4"
-            >
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="price" className="mb-1 block text-sm font-medium text-gray-700">
+                Price
+              </label>
               <input
-                className="border p-1 bg-white rounded px-4"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                type="text"
-                placeholder="Product Name"
-                required
-              />
-
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                type="text"
-                placeholder="Description"
-                required
-              />
-
-              <input
-                className="border p-1 bg-white rounded px-4"
+                id="price"
+                className={inputClass}
                 name="price"
+                min={0}
                 value={formData.price}
                 onChange={handleChange}
                 type="number"
-                placeholder="Enter Price"
                 required
               />
+            </div>
 
+            <div>
+              <label htmlFor="stock" className="mb-1 block text-sm font-medium text-gray-700">
+                Stock
+              </label>
               <input
-                className="border p-1 bg-white rounded px-4"
+                id="stock"
+                className={inputClass}
                 name="stock"
                 min={0}
                 value={formData.stock}
                 onChange={handleChange}
                 type="number"
-                placeholder="Enter Stock"
                 required
               />
-
-              <div className="w-full border p-1 px-4 rounded bg-white">
-                <select
-                  name="categoryId"
-                  value={formData.categoryId}
-                  className="w-full outline-none bg-white"
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">
-                    Select Category
-                  </option>
-
-                  {categories.map((category) => (
-                    <option
-                      key={category._id}
-                      value={category._id}
-                    >
-                      {category.categoryName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="w-full border p-1 px-4 rounded bg-white">
-                <select
-                  name="supplierId"
-                  value={formData.supplierId}
-                  className="w-full outline-none bg-white"
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">
-                    Select Supplier
-                  </option>
-
-                  {suppliers.map((supplier) => (
-                    <option
-                      key={supplier._id}
-                      value={supplier._id}
-                    >
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex space-x-2">
-                <button
-                  type="submit"
-                  className="w-full mt-2 p-3 bg-blue-500 text-white rounded cursor-pointer"
-                >
-                  {editProduct
-                    ? "Update Product"
-                    : "Add Product"}
-                </button>
-
-                {editProduct && (
-                  <button
-                    type="button"
-                    className="w-full mt-2 rounded-md bg-red-500 text-white p-3 cursor-pointer hover:bg-red-600"
-                    onClick={handleCancel}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div>
+            <label htmlFor="categoryId" className="mb-1 block text-sm font-medium text-gray-700">
+              Category
+            </label>
+            <select
+              id="categoryId"
+              name="categoryId"
+              value={formData.categoryId}
+              className={inputClass}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Category</option>
+              {categories.map((category) => (
+                <option key={category._id} value={category._id}>
+                  {category.categoryName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="supplierId" className="mb-1 block text-sm font-medium text-gray-700">
+              Supplier
+            </label>
+            <select
+              id="supplierId"
+              name="supplierId"
+              value={formData.supplierId}
+              className={inputClass}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Supplier</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier._id} value={supplier._id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Both flows (add + edit) now offer the same pair of actions,
+              so users don't have to learn two different ways to back out. */}
+          <div className="mt-2 flex gap-2">
+            <Button type="submit" isLoading={submitting} className="w-full">
+              {editProduct ? "Update Product" : "Add Product"}
+            </Button>
+
+            <Button type="button" variant="secondary" className="w-full" onClick={handleCancel}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
