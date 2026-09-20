@@ -1,24 +1,25 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { FaSearch, FaPlus, FaTruckLoading } from "react-icons/fa";
 import type { Supplier } from "../types";
 import { API_URL } from "../config/api";
+import { useToast } from "../context/ToastContext";
+import Button from "./ui/Button";
+import Modal from "./ui/Modal";
+
+// Shared classes so this form matches Products/Users elsewhere in the app.
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 " +
+  "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200";
 
 const Suppliers = () => {
-  const [addEditModal, setAddEditModal] = useState<
-    boolean
-  >(false);
-
+  const [addEditModal, setAddEditModal] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
-
-  const [suppliers, setSuppliers] = useState<Supplier[]>(
-    []
-  );
-
-  const [editSupplier, setEditSupplier] =
-    useState<Supplier | null>(null);
-
-  const [filteredSupplier, setFilteredSupplier] =
-    useState<Supplier[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [filteredSupplier, setFilteredSupplier] = useState<Supplier[]>([]);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -40,16 +41,11 @@ const Suppliers = () => {
     setLoading(true);
 
     try {
-      const response = await axios.get(
-        `${API_URL}/api/supplier/get`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+      const response = await axios.get(`${API_URL}/api/supplier/get`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+      });
 
       const supplierData = response.data.suppliers || [];
 
@@ -57,15 +53,12 @@ const Suppliers = () => {
       setFilteredSupplier(supplierData);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
-          "Error fetching suppliers:",
-          error.response?.data || error.message
+        showToast(
+          error.response?.data?.message || "Error fetching suppliers.",
+          "error"
         );
       } else {
-        console.error(
-          "Error fetching suppliers:",
-          error
-        );
+        showToast("Error fetching suppliers.", "error");
       }
     } finally {
       setLoading(false);
@@ -76,9 +69,7 @@ const Suppliers = () => {
     fetchSuppliers();
   }, []);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
     setFormData((prev) => ({
@@ -87,10 +78,9 @@ const Suppliers = () => {
     }));
   };
 
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSubmitting(true);
 
     try {
       if (editSupplier) {
@@ -99,75 +89,47 @@ const Suppliers = () => {
           formData,
           {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
+              Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
             },
           }
         );
 
         if (response.data.success) {
-          alert("Supplier updated successfully");
-
+          showToast("Supplier updated successfully", "success");
           setEditSupplier(null);
           setAddEditModal(false);
           resetForm();
-
           fetchSuppliers();
         } else {
-          console.error(
-            "Error updating supplier",
-            response.data
-          );
-
-          alert(
-            "Error updating supplier. Please try again"
-          );
+          showToast("Error updating supplier. Please try again", "error");
         }
       } else {
-        const response = await axios.post(
-          `${API_URL}/api/supplier/add`,
-          formData,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
-            },
-          }
-        );
+        const response = await axios.post(`${API_URL}/api/supplier/add`, formData, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+          },
+        });
 
         if (response.data.success) {
-          alert("Supplier added successfully");
-
+          showToast("Supplier added successfully", "success");
           setAddEditModal(false);
           resetForm();
-
           fetchSuppliers();
         } else {
-          console.error(
-            "Error adding supplier",
-            response.data
-          );
-
-          alert(
-            "Error adding supplier. Please try again!"
-          );
+          showToast("Error adding supplier. Please try again!", "error");
         }
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again!"
+        showToast(
+          error.response?.data?.message || "Something went wrong. Please try again!",
+          "error"
         );
-      } else if (error instanceof Error) {
-        alert(error.message);
       } else {
-        alert(
-          "Something went wrong. Please try again!"
-        );
+        showToast("Something went wrong. Please try again!", "error");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -190,55 +152,37 @@ const Suppliers = () => {
     setAddEditModal(true);
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this supplier?"
-    );
+  const handleDelete = async (id: string, name: string) => {
+    const confirmDelete = window.confirm(`Delete "${name}"? This cannot be undone.`);
 
     if (!confirmDelete) return;
 
     try {
-      const response = await axios.delete(
-        `${API_URL}/api/supplier/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+      const response = await axios.delete(`${API_URL}/api/supplier/${id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+      });
 
       if (response.data.success) {
-        alert("Supplier deleted successfully");
+        showToast("Supplier deleted successfully", "success");
         fetchSuppliers();
       } else {
-        console.error(
-          "Error deleting supplier",
-          response.data
-        );
-
-        alert("Error deleting supplier");
+        showToast("Error deleting supplier", "error");
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Error deleting supplier. Please try again."
+        showToast(
+          error.response?.data?.message || "Error deleting supplier. Please try again.",
+          "error"
         );
-      } else if (error instanceof Error) {
-        alert(error.message);
       } else {
-        alert(
-          "Error deleting supplier. Please try again."
-        );
+        showToast("Error deleting supplier. Please try again.", "error");
       }
     }
   };
 
-  const handleSearch = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const searchValue = e.target.value.toLowerCase();
 
     if (!searchValue) {
@@ -246,219 +190,223 @@ const Suppliers = () => {
       return;
     }
 
-    const filtered = suppliers.filter((supplier) =>
-      supplier.name.toLowerCase().includes(searchValue)
+    setFilteredSupplier(
+      suppliers.filter((supplier) => supplier.name.toLowerCase().includes(searchValue))
     );
-
-    setFilteredSupplier(filtered);
   };
 
+  const handleOpenAddModal = () => {
+  setEditSupplier(null);
+  resetForm(); // Ensure clean state before opening
+  setAddEditModal(true);
+};
+
+const handleOpenEditModal = (supplier: Supplier) => {
+  setEditSupplier(supplier);
+  setFormData({
+    name: supplier.name,
+    email: supplier.email,
+    phone: supplier.phone,
+    address: supplier.address,
+  });
+  setAddEditModal(true);
+};
+
   return (
-    <div className="w-full h-full flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-bold">
-        Supplier Management
-      </h1>
+    <div className="flex h-full w-full flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold text-gray-900">Supplier Management</h1>
+        <p className="text-sm text-gray-500">
+          {loading
+            ? "Loading suppliers..."
+            : `${filteredSupplier.length} of ${suppliers.length} suppliers`}
+        </p>
+      </div>
 
-      <div className="flex justify-between items-center">
-        <input
-          type="text"
-          placeholder="Search"
-          className="border p-1 bg-white rounded px-4"
-          onChange={handleSearch}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <label htmlFor="supplier-search" className="sr-only">
+            Search suppliers by name
+          </label>
 
-        <button
-          type="button"
-          className="px-4 py-1.5 bg-blue-500 text-white rounded cursor-pointer"
+          <FaSearch
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          />
+
+          <input
+            id="supplier-search"
+            type="text"
+            placeholder="Search suppliers..."
+            className={`${inputClass} pl-9`}
+            onChange={handleSearch}
+          />
+        </div>
+
+        <Button
           onClick={() => {
+            handleOpenAddModal();
             setEditSupplier(null);
             resetForm();
             setAddEditModal(true);
           }}
+          className="w-full sm:w-auto"
         >
+          <FaPlus size={12} aria-hidden="true" />
           Add Supplier
-        </button>
+        </Button>
       </div>
 
-      {loading ? (
-        <div>Loading....</div>
-      ) : (
-        <div>
-          <table className="w-full border-collapse border border-gray-300 mt-4">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border border-gray-300 p-2">
-                  SL
-                </th>
+      {/* Supplier list. overflow-x-auto keeps it usable on narrow screens. */}
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <caption className="sr-only">List of suppliers with email, phone, and address</caption>
 
-                <th className="border border-gray-300 p-2">
-                  Supplier Name
-                </th>
-
-                <th className="border border-gray-300 p-2">
-                  Email
-                </th>
-
-                <th className="border border-gray-300 p-2">
-                  Phone Number
-                </th>
-
-                <th className="border border-gray-300 p-2">
-                  Address
-                </th>
-
-                <th className="border border-gray-300 p-2">
-                  Action
-                </th>
+            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-medium">SL</th>
+                <th scope="col" className="px-4 py-3 font-medium">Supplier Name</th>
+                <th scope="col" className="px-4 py-3 font-medium">Email</th>
+                <th scope="col" className="px-4 py-3 font-medium">Phone Number</th>
+                <th scope="col" className="px-4 py-3 font-medium">Address</th>
+                <th scope="col" className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
 
-            <tbody>
-              {filteredSupplier.map(
-                (supplier, index) => (
-                  <tr key={supplier._id}>
-                    <td className="border border-gray-300 p-2">
-                      {index + 1}
-                    </td>
-
-                    <td className="border border-gray-300 p-2">
-                      {supplier.name}
-                    </td>
-
-                    <td className="border border-gray-300 p-2">
-                      {supplier.email}
-                    </td>
-
-                    <td className="border border-gray-300 p-2">
-                      {supplier.phone}
-                    </td>
-
-                    <td className="border border-gray-300 p-2">
-                      {supplier.address}
-                    </td>
-
-                    <td className="border border-gray-200 p-2">
-                      <div className="flex items-center justify-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleEdit(supplier)
-                          }
-                          className="bg-yellow-500 text-white px-2 py-1 rounded-md hover:bg-yellow-600 mr-2"
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 w-full rounded bg-gray-200" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                filteredSupplier.map((supplier, index) => (
+                  <tr key={supplier._id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{supplier.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{supplier.email}</td>
+                    <td className="px-4 py-3 text-gray-600">{supplier.phone}</td>
+                    <td className="px-4 py-3 text-gray-600">{supplier.address}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="warning"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => handleEdit(supplier)}
+                          aria-label={`Edit ${supplier.name}`}
                         >
                           Edit
-                        </button>
+                        </Button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDelete(supplier._id)
-                          }
-                          className="bg-red-500 text-white px-2 py-1 rounded-md hover:bg-red-600"
+                        <Button
+                          variant="danger"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => handleDelete(supplier._id, supplier.name)}
+                          aria-label={`Delete ${supplier.name}`}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
-                )
+                ))
               )}
             </tbody>
           </table>
-
-          {filteredSupplier.length === 0 && (
-            <div className="p-4 text-center">
-              No Records
-            </div>
-          )}
         </div>
-      )}
 
-      {addEditModal && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black/50 flex justify-center items-center">
-          <div className="bg-white p-4 rounded shadow-md w-1/3 relative">
-            <h1 className="text-xl font-bold">
-              {editSupplier
-                ? "Edit Supplier"
-                : "Add Supplier"}
-            </h1>
-
-            <button
-              type="button"
-              className="absolute top-4 right-4 font-bold text-lg cursor-pointer"
-              onClick={handleCancel}
-            >
-              X
-            </button>
-
-            <form
-              className="flex flex-col gap-4 mt-4"
-              onSubmit={handleSubmit}
-            >
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                type="text"
-                placeholder="Supplier Name"
-                required
-              />
-
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                type="email"
-                placeholder="Supplier Email"
-                required
-              />
-
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                type="tel"
-                placeholder="Supplier Phone Number"
-                required
-              />
-
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                type="text"
-                placeholder="Supplier Address"
-                required
-              />
-
-              <div className="flex space-x-2">
-                <button
-                  type="submit"
-                  className="w-full mt-2 p-3 bg-blue-500 text-white rounded cursor-pointer"
-                >
-                  {editSupplier
-                    ? "Update Supplier"
-                    : "Add Supplier"}
-                </button>
-
-                {editSupplier && (
-                  <button
-                    type="button"
-                    className="w-full mt-2 rounded-md bg-red-500 text-white p-3 cursor-pointer hover:bg-red-600"
-                    onClick={handleCancel}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
+        {!loading && filteredSupplier.length === 0 && (
+          <div className="flex flex-col items-center gap-2 p-10 text-center text-gray-400">
+            <FaTruckLoading size={28} aria-hidden="true" />
+            <p className="text-sm">No suppliers found</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <Modal
+        isOpen={addEditModal}
+        onClose={handleCancel}
+        title={editSupplier ? "Edit Supplier" : "Add Supplier"}
+      >
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="supplier-name" className="mb-1 block text-sm font-medium text-gray-700">
+              Supplier Name
+            </label>
+            <input
+              id="supplier-name"
+              className={inputClass}
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              type="text"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="supplier-email" className="mb-1 block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <input
+              id="supplier-email"
+              className={inputClass}
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              type="email"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="supplier-phone" className="mb-1 block text-sm font-medium text-gray-700">
+              Phone Number
+            </label>
+            <input
+              id="supplier-phone"
+              className={inputClass}
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              type="tel"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="supplier-address" className="mb-1 block text-sm font-medium text-gray-700">
+              Address
+            </label>
+            <input
+              id="supplier-address"
+              className={inputClass}
+              name="address"
+              value={formData.address}
+              onChange={handleChange}
+              type="text"
+              required
+            />
+          </div>
+
+          {/* Same action pair for both Add and Edit flows. */}
+          <div className="mt-2 flex gap-2">
+            <Button type="submit" isLoading={submitting} className="w-full">
+              {editSupplier ? "Update Supplier" : "Add Supplier"}
+            </Button>
+
+            <Button type="button" variant="secondary" className="w-full" onClick={handleCancel}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

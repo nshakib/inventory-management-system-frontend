@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { FaTimes } from "react-icons/fa";
 
 interface ModalProps {
@@ -9,8 +9,6 @@ interface ModalProps {
 }
 
 const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (!isOpen) return;
 
@@ -19,9 +17,8 @@ const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    dialogRef.current?.focus();
-
-    // Prevent background scroll while the modal is open.
+    
+    // Prevent background scroll
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -35,19 +32,17 @@ const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => {
-        // Close only when the backdrop itself (not the dialog) is clicked.
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 transition-opacity duration-200"
+      onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        tabIndex={-1}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-6 shadow-xl outline-none"
+        // Removed tabIndex={-1} and ref to prevent focus fighting with inputs
+        className="w-full max-w-md transform overflow-hidden rounded-lg bg-white p-6 shadow-xl transition-all duration-200 ease-out"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="modal-title" className="text-lg font-semibold text-gray-900">

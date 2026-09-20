@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { FaSearch, FaShoppingBag, FaBoxOpen } from "react-icons/fa";
 import { API_URL } from "../../config/api";
-
+import { useToast } from "../../context/ToastContext";
+import Button from "../ui/Button";
+import Modal from "../ui/Modal";
 
 interface Category {
   _id: string;
@@ -32,15 +35,46 @@ interface OrderData {
   price: number;
 }
 
+// Same base field styling as the admin-side forms (Products/Suppliers/Users).
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 " +
+  "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200";
+
+// Stock severity shown with color + text, matching the admin Products page,
+// instead of color alone.
+const stockBadge = (stock: number) => {
+  if (stock === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+        Out · {stock}
+      </span>
+    );
+  }
+
+  if (stock < 5) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+        Low · {stock}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+      In stock · {stock}
+    </span>
+  );
+};
+
 const CustomerProducts = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>(
-    []
-  );
-  const [filteredProducts, setFilteredProducts] =
-    useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const [openModal, setOpenModal] = useState(false);
+  const { showToast } = useToast();
 
   const [orderData, setOrderData] = useState<OrderData>({
     productId: "",
@@ -51,26 +85,21 @@ const CustomerProducts = () => {
   });
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] =
-    useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get(
-        `${API_URL}/api/products/get`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+      setLoading(true);
+
+      const response = await axios.get(`${API_URL}/api/products/get`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+      });
 
       if (response.data.success) {
         const productData = response.data.products || [];
-        const categoryData =
-          response.data.categories || [];
+        const categoryData = response.data.categories || [];
 
         setProducts(productData);
         setCategories(categoryData);
@@ -78,16 +107,15 @@ const CustomerProducts = () => {
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
-          "Error fetching products:",
-          error.response?.data || error.message
+        showToast(
+          error.response?.data?.message || "Error fetching products.",
+          "error"
         );
       } else {
-        console.error(
-          "Error fetching products:",
-          error
-        );
+        showToast("Error fetching products.", "error");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,37 +131,30 @@ const CustomerProducts = () => {
 
     if (selectedCategory) {
       filtered = filtered.filter(
-        (product) =>
-          product.categoryId?._id === selectedCategory
+        (product) => product.categoryId?._id === selectedCategory
       );
     }
 
     if (searchTerm) {
       filtered = filtered.filter((product) =>
-        product.name
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase())
+        product.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     setFilteredProducts(filtered);
   }, [products, searchTerm, selectedCategory]);
 
-  const handleSearch = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
 
-  const handleCategoryChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedCategory(e.target.value);
   };
 
   const handleOrderChange = (product: Product) => {
     if (product.stock <= 0) {
-      alert("This product is out of stock");
+      showToast("This product is out of stock", "error");
       return;
     }
 
@@ -148,14 +169,11 @@ const CustomerProducts = () => {
     setOpenModal(true);
   };
 
-  const increaseQuantity = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const increaseQuantity = (e: React.ChangeEvent<HTMLInputElement>) => {
     const quantity = Number(e.target.value);
 
     if (quantity > orderData.stock) {
-      alert("Not enough stock");
-
+      showToast("Not enough stock", "error");
       return;
     }
 
@@ -182,20 +200,20 @@ const CustomerProducts = () => {
     });
   };
 
-  const handleOrderSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleOrderSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (orderData.quantity > orderData.stock) {
-      alert("Not enough stock");
+      showToast("Not enough stock", "error");
       return;
     }
 
     if (orderData.quantity < 1) {
-      alert("Quantity must be at least 1");
+      showToast("Quantity must be at least 1", "error");
       return;
     }
+
+    setSubmitting(true);
 
     try {
       const response = await axios.post(
@@ -207,86 +225,85 @@ const CustomerProducts = () => {
         },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
+            Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
           },
         }
       );
 
       if (response.data.success) {
-        alert("Order added successfully");
-
+        showToast("Order placed successfully", "success");
         closeModal();
-
         await fetchProducts();
       } else {
-        alert(
-          response.data.message ||
-            "Error adding order. Please try again."
+        showToast(
+          response.data.message || "Error adding order. Please try again.",
+          "error"
         );
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Error adding order. Please try again."
-        );
-
-        console.error(
-          "Error adding order:",
-          error.response?.data || error.message
+        showToast(
+          error.response?.data?.message || "Error adding order. Please try again.",
+          "error"
         );
       } else {
-        console.error(
-          "Error adding order:",
-          error
-        );
-
-        alert(
-          "Error adding order. Please try again."
-        );
+        showToast("Error adding order. Please try again.", "error");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <div className="py-4 px-6">
-        <h2 className="font-bold text-xl">
-          Products
-        </h2>
+    <div className="p-4 sm:p-6">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {loading
+            ? "Loading products..."
+            : `${filteredProducts.length} of ${products.length} products`}
+        </p>
       </div>
 
       {/* Filters */}
-      <div className="py-4 px-6 flex justify-between items-center gap-4">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-56">
+          <label htmlFor="category-filter" className="sr-only">
+            Filter by category
+          </label>
+
           <select
+            id="category-filter"
             name="category"
-            className="border p-2 bg-white rounded"
+            className={inputClass}
             value={selectedCategory}
             onChange={handleCategoryChange}
           >
-            <option value="">
-              Select Category
-            </option>
+            <option value="">All Categories</option>
 
             {categories.map((category) => (
-              <option
-                key={category._id}
-                value={category._id}
-              >
+              <option key={category._id} value={category._id}>
                 {category.categoryName}
               </option>
             ))}
           </select>
         </div>
 
-        <div>
+        <div className="relative w-full sm:max-w-xs">
+          <label htmlFor="product-search" className="sr-only">
+            Search products by name
+          </label>
+
+          <FaSearch
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          />
+
           <input
+            id="product-search"
             type="text"
-            placeholder="Search"
-            className="border p-1 bg-white rounded px-4"
+            placeholder="Search products..."
+            className={`${inputClass} pl-9`}
             value={searchTerm}
             onChange={handleSearch}
           />
@@ -294,173 +311,122 @@ const CustomerProducts = () => {
       </div>
 
       {/* Product table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300 mt-4">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border border-gray-300 p-2">
-                SL
-              </th>
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <caption className="sr-only">List of products available to order</caption>
 
-              <th className="border border-gray-300 p-2">
-                Product Name
-              </th>
+            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-medium">SL</th>
+                <th scope="col" className="px-4 py-3 font-medium">Product Name</th>
+                <th scope="col" className="px-4 py-3 font-medium">Category</th>
+                <th scope="col" className="px-4 py-3 font-medium">Price</th>
+                <th scope="col" className="px-4 py-3 font-medium">Stock</th>
+                <th scope="col" className="px-4 py-3 font-medium text-right">Action</th>
+              </tr>
+            </thead>
 
-              <th className="border border-gray-300 p-2">
-                Category Name
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Price
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Stock
-              </th>
-
-              <th className="border border-gray-300 p-2">
-                Action
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredProducts.map(
-              (product, index) => (
-                <tr key={product._id}>
-                  <td className="border border-gray-300 p-2 text-center">
-                    {index + 1}
-                  </td>
-
-                  <td className="border border-gray-300 p-2 text-center">
-                    {product.name}
-                  </td>
-
-                  <td className="border border-gray-300 p-2 text-center">
-                    {product.categoryId?.categoryName ||
-                      "N/A"}
-                  </td>
-
-                  <td className="border border-gray-300 p-2 text-center">
-                    {product.price}
-                  </td>
-
-                  <td className="border border-gray-300 p-2 text-center">
-                    {product.stock === 0 ? (
-                      <span className="bg-red-100 text-red-500 px-2 py-1 rounded">
-                        {product.stock}
-                      </span>
-                    ) : product.stock < 5 ? (
-                      <span className="bg-yellow-100 text-yellow-600 px-2 py-1 rounded">
-                        {product.stock}
-                      </span>
-                    ) : (
-                      <span className="bg-green-100 text-green-500 px-2 py-1 rounded">
-                        {product.stock}
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="border border-gray-200 p-2">
-                    <div className="flex items-center justify-center">
-                      <button
-                        type="button"
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 w-full rounded bg-gray-200" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                filteredProducts.map((product, index) => (
+                  <tr key={product._id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {product.categoryId?.categoryName || "N/A"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">${product.price}</td>
+                    <td className="px-4 py-3">{stockBadge(product.stock)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant={product.stock === 0 ? "secondary" : "primary"}
                         disabled={product.stock === 0}
-                        className={`text-white px-2 py-1 rounded-md mr-2 ${
+                        className="px-3 py-1.5 text-xs"
+                        onClick={() => handleOrderChange(product)}
+                        aria-label={
                           product.stock === 0
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-green-500 hover:bg-green-700 cursor-pointer"
-                        }`}
-                        onClick={() =>
-                          handleOrderChange(product)
+                            ? `${product.name} is out of stock`
+                            : `Order ${product.name}`
                         }
                       >
-                        {product.stock === 0
-                          ? "Out of Stock"
-                          : "Order"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
+                        <FaShoppingBag size={11} aria-hidden="true" />
+                        {product.stock === 0 ? "Out of Stock" : "Order"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {filteredProducts.length === 0 && (
-          <div className="p-4 text-center">
-            No Records
+        {!loading && filteredProducts.length === 0 && (
+          <div className="flex flex-col items-center gap-2 p-10 text-center text-gray-400">
+            <FaBoxOpen size={28} aria-hidden="true" />
+            <p className="text-sm">No products found</p>
           </div>
         )}
       </div>
 
       {/* Order Modal */}
-      {openModal && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black/50 flex justify-center items-center">
-          <div className="bg-white p-4 rounded shadow-md w-1/3 relative">
-            <h1 className="text-xl font-bold">
-              Place Order
-            </h1>
-
-            <button
-              type="button"
-              className="absolute top-4 right-4 font-bold text-lg cursor-pointer"
-              onClick={closeModal}
-            >
-              X
-            </button>
-
-            <form
-              onSubmit={handleOrderSubmit}
-              className="flex flex-col gap-4 mt-4"
-            >
-              <input
-                className="border p-1 bg-white rounded px-4"
-                name="quantity"
-                value={orderData.quantity}
-                onChange={increaseQuantity}
-                min={1}
-                max={orderData.stock}
-                type="number"
-                placeholder="Quantity"
-                required
-              />
-
-              <p>
-                <strong>Price:</strong>{" "}
-                {orderData.price}
-              </p>
-
-              <p>
-                <strong>Available Stock:</strong>{" "}
-                {orderData.stock}
-              </p>
-
-              <p>
-                <strong>Total:</strong>{" "}
-                {orderData.total}
-              </p>
-
-              <div className="flex space-x-2">
-                <button
-                  type="submit"
-                  className="w-full mt-2 p-3 bg-blue-500 text-white rounded cursor-pointer hover:bg-blue-600"
-                >
-                  Place Order
-                </button>
-
-                <button
-                  type="button"
-                  className="w-full mt-2 rounded-md bg-red-500 text-white p-3 cursor-pointer hover:bg-red-600"
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+      <Modal isOpen={openModal} onClose={closeModal} title="Place Order">
+        <form onSubmit={handleOrderSubmit} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="quantity" className="mb-1 block text-sm font-medium text-gray-700">
+              Quantity
+            </label>
+            <input
+              id="quantity"
+              className={inputClass}
+              name="quantity"
+              value={orderData.quantity}
+              onChange={increaseQuantity}
+              min={1}
+              max={orderData.stock}
+              type="number"
+              required
+            />
           </div>
-        </div>
-      )}
+
+          <dl className="space-y-1.5 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
+            <div className="flex justify-between">
+              <dt className="font-medium text-gray-500">Price</dt>
+              <dd>${orderData.price}</dd>
+            </div>
+
+            <div className="flex justify-between">
+              <dt className="font-medium text-gray-500">Available Stock</dt>
+              <dd>{orderData.stock}</dd>
+            </div>
+
+            <div className="flex justify-between border-t border-gray-200 pt-1.5 font-semibold text-gray-900">
+              <dt>Total</dt>
+              <dd>${orderData.total}</dd>
+            </div>
+          </dl>
+
+          <div className="flex gap-2">
+            <Button type="submit" isLoading={submitting} className="w-full">
+              Place Order
+            </Button>
+
+            <Button type="button" variant="secondary" className="w-full" onClick={closeModal}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

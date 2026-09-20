@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { FaEye, FaEyeSlash, FaUserEdit } from "react-icons/fa";
 import { API_URL } from "../config/api";
+import { useToast } from "../context/ToastContext";
+import Button from "./ui/Button";
 
 interface UserProfile {
   name: string;
@@ -8,6 +11,27 @@ interface UserProfile {
   address: string;
   password?: string;
 }
+
+// Same base field styling as Products/Suppliers/Users, plus a distinct
+// read-only look so it's visually obvious when the form isn't editable
+// (previously a disabled input looked identical to an editable one).
+const fieldClass = (editable: boolean) =>
+  `w-full rounded-md border px-3 py-2 text-sm focus:outline-none ${
+    editable
+      ? "border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+      : "border-gray-200 bg-gray-50 text-gray-500"
+  }`;
+
+const ProfileSkeleton = () => (
+  <div className="animate-pulse space-y-4">
+    {Array.from({ length: 3 }).map((_, i) => (
+      <div key={i}>
+        <div className="mb-1 h-4 w-16 rounded bg-gray-200" />
+        <div className="h-10 w-full rounded-md bg-gray-200" />
+      </div>
+    ))}
+  </div>
+);
 
 const Profile = () => {
   const [user, setUser] = useState<UserProfile>({
@@ -18,19 +42,20 @@ const Profile = () => {
   });
 
   const [edit, setEdit] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   const fetchUser = async () => {
+    setLoading(true);
+
     try {
-      const response = await axios.get(
-        `${API_URL}/api/users/profile`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+      const response = await axios.get(`${API_URL}/api/users/profile`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+      });
 
       if (response.data.success) {
         setUser({
@@ -42,17 +67,15 @@ const Profile = () => {
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
-          "Error fetching user:",
-          error.response?.data || error.message
+        showToast(
+          error.response?.data?.message || "Error fetching user profile. Please try again.",
+          "error"
         );
       } else {
-        console.error("Error fetching user:", error);
+        showToast("Error fetching user profile. Please try again.", "error");
       }
-
-      alert(
-        "Error fetching user profile. Please try again."
-      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -60,28 +83,21 @@ const Profile = () => {
     fetchUser();
   }, []);
 
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSubmitting(true);
 
     try {
-      const response = await axios.put(
-        `${API_URL}/api/users/profile`,
-        user,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+      const response = await axios.put(`${API_URL}/api/users/profile`, user, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("pos-token")}`,
+        },
+      });
 
       if (response.data.success) {
-        alert("Profile updated successfully");
-
+        showToast("Profile updated successfully", "success");
         setEdit(false);
+        setShowPassword(false);
 
         // Clear password after successful update
         setUser((prev) => ({
@@ -89,167 +105,146 @@ const Profile = () => {
           password: "",
         }));
       } else {
-        console.error(
-          "Error updating profile",
-          response.data.message
-        );
-
-        alert(
-          "Error updating profile. Please try again."
-        );
+        showToast("Error updating profile. Please try again.", "error");
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        alert(
-          error.response?.data?.message ||
-            "Error updating profile. Please try again."
+        showToast(
+          error.response?.data?.message || "Error updating profile. Please try again.",
+          "error"
         );
-      } else if (error instanceof Error) {
-        alert(error.message);
       } else {
-        alert(
-          "Error updating profile. Please try again."
-        );
+        showToast("Error updating profile. Please try again.", "error");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  const handleCancel = () => {
+    fetchUser();
+    setEdit(false);
+    setShowPassword(false);
+  };
+
   return (
-    <div className="w-full max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold">
-        User Profile
-      </h1>
-
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4 mt-4">
-          <label
-            className="block text-sm font-medium text-gray-700 mb-1"
-            htmlFor="name"
-          >
-            Name:
-          </label>
-
-          <input
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={user.name}
-            onChange={(e) =>
-              setUser({
-                ...user,
-                name: e.target.value,
-              })
-            }
-            disabled={!edit}
-            type="text"
-            id="name"
-            name="name"
-          />
+    <div className="mx-auto w-full max-w-2xl p-4 sm:p-6">
+      <div className="rounded-lg bg-white p-4 shadow-md sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">User Profile</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {edit ? "Update your account details below" : "View your account details"}
+          </p>
         </div>
 
-        <div className="mb-4">
-          <label
-            className="block text-sm font-medium text-gray-700 mb-1"
-            htmlFor="email"
-          >
-            Email:
-          </label>
-
-          <input
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={user.email}
-            onChange={(e) =>
-              setUser({
-                ...user,
-                email: e.target.value,
-              })
-            }
-            disabled={!edit}
-            type="email"
-            id="email"
-            name="email"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label
-            className="block text-sm font-medium text-gray-700 mb-1"
-            htmlFor="address"
-          >
-            Address:
-          </label>
-
-          <input
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={user.address}
-            onChange={(e) =>
-              setUser({
-                ...user,
-                address: e.target.value,
-              })
-            }
-            disabled={!edit}
-            type="text"
-            id="address"
-            name="address"
-          />
-        </div>
-
-        {edit && (
-          <div className="mb-4">
-            <label
-              className="block text-sm font-medium text-gray-700 mb-1"
-              htmlFor="password"
-            >
-              Password:
-            </label>
-
-            <input
-              placeholder="Leave blank if you don't want to change password"
-              onChange={(e) =>
-                setUser({
-                  ...user,
-                  password: e.target.value,
-                })
-              }
-              type="password"
-              id="password"
-              name="password"
-              autoComplete="new-password"
-              value={user.password || ""}
-              className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        )}
-
-        {!edit ? (
-          <button
-            type="button"
-            onClick={() => setEdit(true)}
-            className="bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700"
-          >
-            Edit Profile
-          </button>
+        {loading ? (
+          <ProfileSkeleton />
         ) : (
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
-            >
-              Update Profile
-            </button>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div>
+              <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
+                Name
+              </label>
 
-            <button
-              type="button"
-              onClick={() => {
-                fetchUser();
-                setEdit(false);
-              }}
-              className="bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700"
-            >
-              Cancel
-            </button>
-          </div>
+              <input
+                className={fieldClass(edit)}
+                value={user.name}
+                onChange={(e) => setUser({ ...user, name: e.target.value })}
+                disabled={!edit}
+                type="text"
+                id="name"
+                name="name"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+                Email
+              </label>
+
+              <input
+                className={fieldClass(edit)}
+                value={user.email}
+                onChange={(e) => setUser({ ...user, email: e.target.value })}
+                disabled={!edit}
+                type="email"
+                id="email"
+                name="email"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="address" className="mb-1 block text-sm font-medium text-gray-700">
+                Address
+              </label>
+
+              <input
+                className={fieldClass(edit)}
+                value={user.address}
+                onChange={(e) => setUser({ ...user, address: e.target.value })}
+                disabled={!edit}
+                type="text"
+                id="address"
+                name="address"
+                required
+              />
+            </div>
+
+            {edit && (
+              <div>
+                <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+
+                <div className="relative">
+                  <input
+                    placeholder="Leave blank if you don't want to change password"
+                    onChange={(e) => setUser({ ...user, password: e.target.value })}
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    name="password"
+                    autoComplete="new-password"
+                    value={user.password || ""}
+                    className={`${fieldClass(edit)} pr-10`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 flex cursor-pointer items-center px-3 text-gray-400 hover:text-gray-600
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-r-md"
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-2 flex gap-2">
+              {!edit ? (
+                <Button type="button" variant="warning" onClick={() => setEdit(true)}>
+                  <FaUserEdit size={12} aria-hidden="true" />
+                  Edit Profile
+                </Button>
+              ) : (
+                <>
+                  <Button type="submit" isLoading={submitting}>
+                    Update Profile
+                  </Button>
+
+                  <Button type="button" variant="secondary" onClick={handleCancel}>
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          </form>
         )}
-      </form>
+      </div>
     </div>
   );
 };
