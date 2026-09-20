@@ -62,10 +62,13 @@ const Sidebar = () => {
                     <li key={item.name}>
                         <NavLink
                         end={item.isParent}
+                        aria-label={item.name}
+                        title={item.name}
                         className={({isActive}) => `flex items-center p-3 rounded-md hover:bg-gray-700 transition duration-200
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400
                     ${isActive ? "bg-gray-700" : "" }`} 
                         to={item.path}>
-                            <span className='text-xl'>{item.icon}</span>
+                            <span className='text-xl' aria-hidden="true">{item.icon}</span>
                             <span className='ml-4 hidden md:block'>{item.name}</span>
                         </NavLink>
                     </li>
